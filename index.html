@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUB App Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-1.5deg) scale(1.02); }
+            50% { transform: rotate(1.5deg) scale(1.02); }
+        }
+        .animate-wiggle { animation: wiggle 0.2s infinite ease-in-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .folder-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2rem 1.5rem; }
+    </style>
+</head>
+<body class="bg-gray-100 text-slate-900 font-sans overflow-hidden">
+
+<div id="app" class="min-h-screen flex flex-col items-center relative">
+    <!-- Header -->
+    <header class="w-full max-w-md px-10 pt-16 pb-8 z-10">
+        <h1 class="text-4xl font-black italic tracking-tighter">HUB<span class="text-blue-600">.</span></h1>
+        <p id="edit-status" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">智慧分頁管理控制台</p>
+    </header>
+
+    <!-- 分頁容器 -->
+    <div class="flex-1 w-full max-w-lg relative overflow-hidden">
+        <div id="page-slider" class="flex transition-transform duration-500 h-full">
+            <!-- 分頁會由 JS 動態生成 -->
+        </div>
+    </div>
+
+    <!-- 分頁指示點 -->
+    <div id="dots" class="flex gap-2.5 py-10 z-10"></div>
+
+    <!-- 底部編輯按鈕 -->
+    <button id="toggle-edit" class="fixed bottom-12 right-8 w-16 h-16 rounded-full bg-white text-slate-900 shadow-2xl border-[3px] border-white z-[3000] flex items-center justify-center transition-all active:scale-90">
+        <i class="fa-solid fa-pen-to-square text-xl"></i>
+    </button>
+
+    <!-- 資料夾詳情 Modal -->
+    <div id="folder-modal" class="fixed inset-0 z-[2000] bg-white/70 backdrop-blur-3xl hidden flex-col animate-in fade-in">
+        <div class="px-10 py-20 flex justify-between items-center max-w-lg mx-auto w-full">
+            <div>
+                <h2 id="modal-folder-name" class="text-4xl font-black italic tracking-tighter">資料夾</h2>
+                <p id="modal-app-count" class="text-[10px] text-blue-600 font-black mt-1 uppercase tracking-widest">0 應用程式</p>
+            </div>
+            <button onclick="closeFolder()" class="p-4 bg-white rounded-full shadow-xl text-slate-300"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        </div>
+        <div class="flex-1 px-10 overflow-y-auto">
+            <div id="folder-app-grid" class="grid grid-cols-4 gap-y-12 max-w-lg mx-auto pb-32">
+                <!-- App 會由 JS 生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 掃描介面 Modal -->
+    <div id="scanner-modal" class="fixed inset-0 z-[4000] bg-white hidden flex-col">
+        <div class="px-8 pt-16 pb-6 border-b border-slate-50 max-w-lg mx-auto w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-black italic italic tracking-tight"><i class="fa-solid fa-magnifying-glass-chart mr-2 text-blue-600"></i>掃描系統資源</h3>
+                <button onclick="closeScanner()" class="text-slate-400 font-bold text-xs">取消</button>
+            </div>
+            <input type="text" placeholder="搜尋應用程式..." class="w-full bg-slate-100 rounded-2xl py-4 px-6 outline-none font-bold text-sm">
+        </div>
+        <div id="scanner-list" class="flex-1 overflow-y-auto px-8 py-6 max-w-lg mx-auto w-full">
+            <!-- 系統 App 清單 -->
+        </div>
+        <div class="p-8 border-t border-slate-100 max-w-lg mx-auto w-full">
+            <button id="confirm-scan-btn" onclick="confirmScan()" class="w-full py-5 rounded-3xl bg-blue-600 text-white font-black uppercase tracking-widest shadow-xl opacity-50 cursor-not-allowed">
+                確認加入 (0)
+            </button>
+        </div>
+    </div>
+
+    <!-- 新增資料夾 Modal -->
+    <div id="new-folder-modal" class="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-sm hidden items-center justify-center p-8">
+        <div class="bg-white w-full max-w-xs rounded-[3rem] p-10 shadow-2xl">
+            <h3 class="text-2xl font-black mb-6 italic">New Folder</h3>
+            <input id="new-folder-input" type="text" placeholder="命名分頁..." class="w-full bg-slate-100 rounded-2xl px-6 py-4 font-bold text-lg mb-8 outline-none">
+            <div class="flex gap-4">
+                <button onclick="closeNewFolderModal()" class="flex-1 font-bold text-slate-400">取消</button>
+                <button onclick="createNewFolder()" class="flex-1 py-4 bg-black text-white rounded-2xl font-bold">建立</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 模擬資料
+    const SYSTEM_APPS = [
+        { id: 's1', name: 'Spotify', icon: 'fa-music', color: 'bg-[#1ED760]' },
+        { id: 's2', name: 'Netflix', icon: 'fa-tv', color: 'bg-[#E50914]' },
+        { id: 's3', name: 'Instagram', icon: 'fa-instagram', color: 'bg-gradient-to-tr from-[#FFDC80] via-[#F56040] to-[#833AB4]' },
+        { id: 's4', name: 'YouTube', icon: 'fa-play', color: 'bg-[#FF0000]' },
+        { id: 's5', name: 'Chrome', icon: 'fa-globe', color: 'bg-[#4285F4]' },
+        { id: 's6', name: 'Maps', icon: 'fa-map-location-dot', color: 'bg-[#34A853]' },
+        { id: 's7', name: 'Facebook', icon: 'fa-facebook', color: 'bg-[#1877F2]' },
+        { id: 's8', name: 'LINE', icon: 'fa-comment', color: 'bg-[#06C755]' },
+        { id: 's9', name: 'Wallet', icon: 'fa-wallet', color: 'bg-[#1C1C1E]' },
+        { id: 's10', name: 'Steam', icon: 'fa-gamepad', color: 'bg-[#00ADEE]' }
+    ];
+
+    const GRADIENTS = ['from-cyan-400 to-blue-500', 'from-pink-400 to-rose-400', 'from-green-400 to-emerald-500', 'from-violet-400 to-purple-500'];
+
+    let state = {
+        folders: [
+            { id: 'f1', name: '工作', color: GRADIENTS[0], apps: [SYSTEM_APPS[4], SYSTEM_APPS[5]] },
+            { id: 'f2', name: '社群', color: GRADIENTS[1], apps: [SYSTEM_APPS[2], SYSTEM_APPS[6]] }
+        ],
+        isEditMode: false,
+        currentPage: 0,
+        activeFolderId: null,
+        selectedScanIds: []
+    };
+
+    // 初始化渲染
+    function render() {
+        const slider = document.getElementById('page-slider');
+        const dots = document.getElementById('dots');
+        slider.innerHTML = '';
+        dots.innerHTML = '';
+
+        let items = [...state.folders];
+        if (state.isEditMode) items.push({ isAdd: true });
+
+        const pages = [];
+        for (let i = 0; i < items.length; i += 9) pages.push(items.slice(i, i + 9));
+        if (pages.length === 0) pages.push([]);
+
+        pages.forEach((page, pIdx) => {
+            const pageEl = document.createElement('div');
+            pageEl.className = 'min-w-full px-8 grid grid-cols-3 grid-rows-3 gap-y-12 gap-x-6 pt-4 h-full content-start';
+            
+            page.forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.className = `flex flex-col items-center gap-4 transition-all relative ${state.isEditMode && !item.isAdd ? 'animate-wiggle' : ''}`;
+                
+                if (item.isAdd) {
+                    itemEl.innerHTML = `
+                        <div onclick="showNewFolderModal()" class="w-20 h-20 rounded-[2.5rem] border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 bg-white/50 cursor-pointer">
+                            <i class="fa-solid fa-plus text-3xl"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-slate-400 uppercase">新增分頁</span>
+                    `;
+                } else {
+                    const appIcons = item.apps.slice(0, 4).map(app => `
+                        <div class="bg-white/30 backdrop-blur-md rounded-lg flex items-center justify-center text-white text-[10px]">
+                            <i class="fa-solid ${app.icon}"></i>
+                        </div>
+                    `).join('');
+
+                    itemEl.innerHTML = `
+                        <div onclick="openFolder('${item.id}')" class="w-20 h-20 rounded-[2.5rem] bg-gradient-to-br ${item.color} p-4 shadow-xl border-[4px] border-white relative cursor-pointer">
+                            <div class="grid grid-cols-2 gap-1 h-full w-full pointer-events-none">
+                                ${appIcons || '<i class="fa-solid fa-folder col-span-2 m-auto text-white/20 text-xl"></i>'}
+                            </div>
+                            ${state.isEditMode ? `<button onclick="event.stopPropagation(); deleteFolder('${item.id}')" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg border-2 border-white text-[8px]"><i class="fa-solid fa-xmark"></i></button>` : ''}
+                        </div>
+                        <span class="text-[12px] font-extrabold text-slate-500 uppercase tracking-widest text-center truncate w-full px-1">${item.name}</span>
+                    `;
+                }
+                pageEl.appendChild(itemEl);
+            });
+            slider.appendChild(pageEl);
+
+            const dot = document.createElement('div');
+            dot.className = `h-1.5 rounded-full transition-all duration-300 cursor-pointer ${state.currentPage === pIdx ? 'w-8 bg-slate-900' : 'w-1.5 bg-slate-300'}`;
+            dot.onclick = () => { state.currentPage = pIdx; updateSlider(); };
+            dots.appendChild(dot);
+        });
+
+        updateSlider();
+    }
+
+    function updateSlider() {
+        document.getElementById('page-slider').style.transform = `translateX(-${state.currentPage * 100}%)`;
+    }
+
+    // 編輯模式切換
+    document.getElementById('toggle-edit').onclick = () => {
+        state.isEditMode = !state.isEditMode;
+        const btn = document.getElementById('toggle-edit');
+        const status = document.getElementById('edit-status');
+        if (state.isEditMode) {
+            btn.className = btn.className.replace('bg-white text-slate-900', 'bg-blue-600 text-white rotate-180');
+            btn.innerHTML = '<i class="fa-solid fa-check text-xl"></i>';
+            status.innerText = '分頁編輯模式中';
+            status.className = status.className.replace('text-slate-400', 'text-blue-500 animate-pulse');
+        } else {
+            btn.className = btn.className.replace('bg-blue-600 text-white rotate-180', 'bg-white text-slate-900');
+            btn.innerHTML = '<i class="fa-solid fa-pen-to-square text-xl"></i>';
+            status.innerText = '智慧分頁管理控制台';
+            status.className = status.className.replace('text-blue-500 animate-pulse', 'text-slate-400');
+        }
+        render();
+        if (state.activeFolderId) renderFolderContent();
+    };
+
+    // 資料夾操作
+    function openFolder(id) {
+        if (state.isEditMode) return;
+        state.activeFolderId = id;
+        const folder = state.folders.find(f => f.id === id);
+        document.getElementById('modal-folder-name').innerText = folder.name;
+        document.getElementById('folder-modal').classList.remove('hidden');
+        document.getElementById('folder-modal').classList.add('flex');
+        renderFolderContent();
+    }
+
+    function closeFolder() {
+        state.activeFolderId = null;
+        document.getElementById('folder-modal').classList.add('hidden');
+        document.getElementById('folder-modal').classList.remove('flex');
+        render();
+    }
+
+    function renderFolderContent() {
+        const folder = state.folders.find(f => f.id === state.activeFolderId);
+        const grid = document.getElementById('folder-app-grid');
+        document.getElementById('modal-app-count').innerText = `${folder.apps.length} 應用程式`;
+        grid.innerHTML = '';
+
+        folder.apps.forEach(app => {
+            const appEl = document.createElement('div');
+            appEl.className = `flex flex-col items-center gap-3 relative ${state.isEditMode ? 'animate-wiggle' : ''}`;
+            appEl.innerHTML = `
+                <div class="w-16 h-16 rounded-[1.8rem] ${app.color} flex items-center justify-center text-white shadow-lg relative">
+                    <i class="fa-solid ${app.icon} text-2xl"></i>
+                    ${state.isEditMode ? `<button onclick="removeAppFromFolder('${app.id}')" class="absolute -top-2 -right-2 bg-white text-red-500 rounded-full p-1.5 shadow-md border border-red-50 text-[8px]"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase text-center w-full truncate">${app.name}</span>
+            `;
+            grid.appendChild(appEl);
+        });
+
+        const addBtn = document.createElement('div');
+        addBtn.className = 'flex flex-col items-center gap-3 cursor-pointer group';
+        addBtn.onclick = showScanner;
+        addBtn.innerHTML = `
+            <div class="w-16 h-16 rounded-[1.8rem] border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 group-hover:border-blue-500 group-hover:text-blue-500 transition-all">
+                <i class="fa-solid fa-plus text-xl"></i>
+            </div>
+            <span class="text-[10px] font-bold text-slate-300 uppercase">掃描加入</span>
+        `;
+        grid.appendChild(addBtn);
+    }
+
+    function removeAppFromFolder(appId) {
+        const folder = state.folders.find(f => f.id === state.activeFolderId);
+        folder.apps = folder.apps.filter(a => a.id !== appId);
+        renderFolderContent();
+    }
+
+    // 掃描加入功能
+    function showScanner() {
+        state.selectedScanIds = [];
+        const list = document.getElementById('scanner-list');
+        list.innerHTML = '';
+        SYSTEM_APPS.forEach(app => {
+            const item = document.createElement('div');
+            item.className = 'flex items-center p-4 rounded-3xl bg-slate-50 mb-3 cursor-pointer transition-all';
+            item.id = `scan-${app.id}`;
+            item.onclick = () => toggleScanSelection(app.id);
+            item.innerHTML = `
+                <div class="w-12 h-12 rounded-2xl ${app.color} flex items-center justify-center text-white mr-4"><i class="fa-solid ${app.icon}"></i></div>
+                <div class="flex-1 font-bold text-sm">${app.name}</div>
+                <div class="w-6 h-6 rounded-full border-2 border-slate-200 flex items-center justify-center check-box"><i class="fa-solid fa-check text-white hidden text-[10px]"></i></div>
+            `;
+            list.appendChild(item);
+        });
+        document.getElementById('scanner-modal').classList.remove('hidden');
+        document.getElementById('scanner-modal').classList.add('flex');
+        updateScanBtn();
+    }
+
+    function toggleScanSelection(id) {
+        const index = state.selectedScanIds.indexOf(id);
+        const el = document.getElementById(`scan-${id}`);
+        const box = el.querySelector('.check-box');
+        const icon = el.querySelector('.fa-check');
+
+        if (index > -1) {
+            state.selectedScanIds.splice(index, 1);
+            el.classList.remove('bg-slate-900', 'text-white');
+            el.classList.add('bg-slate-50');
+            box.classList.remove('bg-blue-500', 'border-blue-500');
+            icon.classList.add('hidden');
+        } else {
+            state.selectedScanIds.push(id);
+            el.classList.add('bg-slate-900', 'text-white');
+            el.classList.remove('bg-slate-50');
+            box.classList.add('bg-blue-500', 'border-blue-500');
+            icon.classList.remove('hidden');
+        }
+        updateScanBtn();
+    }
+
+    function updateScanBtn() {
+        const btn = document.getElementById('confirm-scan-btn');
+        btn.innerText = `確認加入 (${state.selectedScanIds.length})`;
+        if (state.selectedScanIds.length > 0) {
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        } else {
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+    }
+
+    function confirmScan() {
+        if (state.selectedScanIds.length === 0) return;
+        const folder = state.folders.find(f => f.id === state.activeFolderId);
+        state.selectedScanIds.forEach(id => {
+            if (!folder.apps.find(a => a.id === id)) {
+                folder.apps.push(SYSTEM_APPS.find(a => a.id === id));
+            }
+        });
+        closeScanner();
+        renderFolderContent();
+    }
+
+    function closeScanner() {
+        document.getElementById('scanner-modal').classList.add('hidden');
+        document.getElementById('scanner-modal').classList.remove('flex');
+    }
+
+    // 新增資料夾
+    function showNewFolderModal() {
+        document.getElementById('new-folder-modal').classList.remove('hidden');
+        document.getElementById('new-folder-modal').classList.add('flex');
+    }
+
+    function closeNewFolderModal() {
+        document.getElementById('new-folder-modal').classList.add('hidden');
+        document.getElementById('new-folder-modal').classList.remove('flex');
+    }
+
+    function createNewFolder() {
+        const name = document.getElementById('new-folder-input').value;
+        if (!name) return;
+        state.folders.push({
+            id: 'f' + Date.now(),
+            name: name,
+            color: GRADIENTS[state.folders.length % GRADIENTS.length],
+            apps: []
+        });
+        document.getElementById('new-folder-input').value = '';
+        closeNewFolderModal();
+        render();
+    }
+
+    function deleteFolder(id) {
+        state.folders = state.folders.filter(f => f.id !== id);
+        render();
+    }
+
+    // 啟動
+    render();
+</script>
+
+</body>
+</html>
+
