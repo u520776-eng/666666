@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HUB App Manager - Pure 9</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-1.2deg); }
+            50% { transform: rotate(1.2deg); }
+        }
+        .animate-wiggle { animation: wiggle 0.25s infinite ease-in-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        body, html { 
+            height: 100%; margin: 0; padding: 0; overflow: hidden; 
+            background-color: #f8fafc; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        }
+        #app { height: 100%; display: flex; flex-direction: column; }
+        
+        /* 固定的 3x3 網格佈局 */
+        .main-grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            grid-template-rows: repeat(3, 1fr); 
+            gap: 20px; 
+            padding: 10px 32px;
+            flex: 1;
+            align-content: center;
+        }
+
+        .folder-card {
+            aspect-ratio: 1/1;
+            border-radius: 28px;
+            padding: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            background-size: cover;
+            border: 4px solid white;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .folder-card:active { transform: scale(0.9); }
+
+        .modal-view {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            transform: translateY(100%);
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .modal-view.active { transform: translateY(0); display: flex; }
+
+        .scan-card {
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+        .scan-card.selected {
+            background-color: #0f172a;
+            color: white;
+            border-color: #3b82f6;
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- 頂部標題（移除編輯按鈕） -->
+    <header class="pt-16 px-10 pb-4">
+        <div class="flex flex-col">
+            <h1 class="text-5xl font-black italic tracking-tighter leading-none">HUB<span class="text-blue-600">.</span></h1>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">智能資源管理器</p>
+        </div>
+    </header>
+
+    <!-- 3x3 主網格 -->
+    <div id="main-grid" class="main-grid">
+        <!-- 內容由 JavaScript 渲染 -->
+    </div>
+
+    <!-- 底部裝飾線 -->
+    <div class="h-20 flex justify-center items-start">
+        <div class="w-12 h-1 bg-slate-200 rounded-full"></div>
+    </div>
+
+    <!-- 分頁詳情彈窗 -->
+    <div id="folder-modal" class="modal-view">
+        <div class="p-10 pt-24 flex justify-between items-center">
+            <div>
+                <h2 id="folder-title" class="text-4xl font-black italic tracking-tighter text-slate-900">分頁名稱</h2>
+                <div class="flex gap-2 mt-3">
+                    <span id="folder-app-count" class="bg-blue-600 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-md">0 APPS</span>
+                    <button id="folder-manage-btn" onclick="toggleFolderEdit()" class="bg-white text-slate-500 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest border border-slate-200">
+                        管理模式：關
+                    </button>
+                </div>
+            </div>
+            <button onclick="closeFolder()" class="w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-10 pb-40 no-scrollbar">
+            <div id="folder-grid" class="grid grid-cols-4 gap-x-6 gap-y-12">
+                <!-- App 項目 -->
+            </div>
+        </div>
+
+        <div class="absolute bottom-12 left-0 w-full px-10">
+            <button onclick="openScanner()" class="w-full bg-blue-600 text-white py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-200 flex items-center justify-center gap-4 active:scale-95 transition-all">
+                <i class="fa-solid fa-plus-circle text-xl"></i> 掃描新增資源
+            </button>
+        </div>
+    </div>
+
+    <!-- 資源掃描介面 -->
+    <div id="scan-modal" class="fixed inset-0 z-[5000] bg-white hidden flex-col">
+        <div class="p-8 pt-20 flex justify-between items-center border-b border-slate-50">
+            <h3 class="text-3xl font-black italic tracking-tight text-slate-900">資源庫</h3>
+            <button onclick="closeScanner()" class="text-slate-400 font-bold text-sm bg-slate-100 px-4 py-2 rounded-full">關閉</button>
+        </div>
+        <div id="scan-list" class="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar"></div>
+        <div class="p-8 bg-white border-t border-slate-100">
+            <button id="scan-confirm-btn" onclick="commitScan()" class="w-full py-6 rounded-[30px] bg-slate-100 text-slate-300 font-black uppercase tracking-widest transition-all">
+                確認加入 (0)
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const APP_POOL = [
+        { id: 'a1', name: 'Spotify', icon: 'fa-music', color: 'bg-[#1DB954]' },
+        { id: 'a2', name: 'Netflix', icon: 'fa-tv', color: 'bg-[#E50914]' },
+        { id: 'a3', name: 'Instagram', icon: 'fa-camera-retro', color: 'bg-gradient-to-tr from-[#f9ce34] via-[#ee2a7b] to-[#6228d7]' },
+        { id: 'a4', name: 'YouTube', icon: 'fa-play', color: 'bg-[#FF0000]' },
+        { id: 'a5', name: 'Chrome', icon: 'fa-globe', color: 'bg-[#4285F4]' },
+        { id: 'a6', name: 'Maps', icon: 'fa-map-location-dot', color: 'bg-[#34A853]' },
+        { id: 'a7', name: 'Facebook', icon: 'fa-facebook-f', color: 'bg-[#1877F2]' },
+        { id: 'a8', name: 'LINE', icon: 'fa-comment', color: 'bg-[#00B900]' },
+        { id: 'a9', name: 'Wallet', icon: 'fa-wallet', color: 'bg-[#1c1c1e]' },
+        { id: 'a10', name: 'Steam', icon: 'fa-gamepad', color: 'bg-[#171a21]' },
+        { id: 'a11', name: 'App Store', icon: 'fa-store', color: 'bg-[#007AFF]' },
+        { id: 'a12', name: 'Settings', icon: 'fa-gear', color: 'bg-[#8E8E93]' },
+        { id: 'a13', name: 'Photos', icon: 'fa-image', color: 'bg-white text-blue-400 border border-slate-100' },
+        { id: 'a14', name: 'Mail', icon: 'fa-envelope', color: 'bg-blue-500 text-white' }
+    ];
+
+    const FOLDER_THEMES = [
+        'from-cyan-400 to-blue-500', 'from-rose-400 to-pink-500', 'from-amber-400 to-orange-500',
+        'from-indigo-400 to-purple-500', 'from-emerald-400 to-teal-500', 'from-slate-700 to-slate-900',
+        'from-violet-500 to-fuchsia-500', 'from-lime-400 to-green-600', 'from-red-500 to-orange-600'
+    ];
+
+    let state = {
+        folders: [
+            { id: 'f1', name: '工作生產', color: FOLDER_THEMES[0], apps: [APP_POOL[4], APP_POOL[13]] },
+            { id: 'f2', name: '社群媒體', color: FOLDER_THEMES[1], apps: [APP_POOL[2], APP_POOL[6], APP_POOL[7]] },
+            { id: 'f3', name: '影音娛樂', color: FOLDER_THEMES[2], apps: [APP_POOL[1], APP_POOL[3]] },
+            { id: 'f4', name: '遊戲中心', color: FOLDER_THEMES[3], apps: [APP_POOL[9]] },
+            { id: 'f5', name: '交通地圖', color: FOLDER_THEMES[4], apps: [APP_POOL[5]] },
+            { id: 'f6', name: '系統工具', color: FOLDER_THEMES[5], apps: [APP_POOL[11], APP_POOL[10]] },
+            { id: 'f7', name: '金融錢包', color: FOLDER_THEMES[6], apps: [APP_POOL[8]] },
+            { id: 'f8', name: '生活健康', color: FOLDER_THEMES[7], apps: [APP_POOL[12]] },
+            { id: 'f9', name: '音樂電台', color: FOLDER_THEMES[8], apps: [APP_POOL[0]] }
+        ],
+        activeFolderId: null,
+        folderEditMode: false,
+        scanSelections: []
+    };
+
+    function renderMain() {
+        const grid = document.getElementById('main-grid');
+        grid.innerHTML = '';
+
+        state.folders.forEach(item => {
+            const node = document.createElement('div');
+            node.className = `flex flex-col items-center gap-3`;
+            
+            const previews = item.apps.slice(0, 4).map(a => `
+                <div class="bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center text-white text-[10px]">
+                    <i class="fa-solid ${a.icon}"></i>
+                </div>
+            `).join('');
+
+            node.innerHTML = `
+                <div onclick="openFolder('${item.id}')" class="folder-card bg-gradient-to-br ${item.color} cursor-pointer shadow-lg active:scale-90 transition-transform">
+                    <div class="grid grid-cols-2 gap-1.5 h-full w-full pointer-events-none">
+                        ${previews || '<i class="fa-solid fa-folder-open m-auto text-white/30 text-xl"></i>'}
+                    </div>
+                </div>
+                <span class="text-[12px] font-extrabold text-slate-600 uppercase tracking-widest text-center truncate w-full px-2">${item.name}</span>
+            `;
+            grid.appendChild(node);
+        });
+    }
+
+    function openFolder(id) {
+        state.activeFolderId = id;
+        state.folderEditMode = false;
+        const folder = state.folders.find(f => f.id === id);
+        if(!folder) return;
+        
+        document.getElementById('folder-title').innerText = folder.name;
+        document.getElementById('folder-modal').classList.add('active');
+        updateFolderManageUI();
+        renderFolderContent();
+    }
+
+    function closeFolder() {
+        document.getElementById('folder-modal').classList.remove('active');
+        state.activeFolderId = null;
+        renderMain();
+    }
+
+    function toggleFolderEdit() {
+        state.folderEditMode = !state.folderEditMode;
+        updateFolderManageUI();
+        renderFolderContent();
+    }
+
+    function updateFolderManageUI() {
+        const btn = document.getElementById('folder-manage-btn');
+        btn.innerText = `管理模式：${state.folderEditMode ? '開' : '關'}`;
+        btn.className = state.folderEditMode 
+            ? 'bg-red-500 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest' 
+            : 'bg-white text-slate-500 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest border border-slate-200';
+    }
+
+    function renderFolderContent() {
+        const folder = state.folders.find(f => f.id === state.activeFolderId);
+        if (!folder) return;
+        const grid = document.getElementById('folder-grid');
+        document.getElementById('folder-app-count').innerText = `${folder.apps.length} APPS`;
+        grid.innerHTML = '';
+
+        folder.apps.forEach(app => {
+            const div = document.createElement('div');
+            div.className = `flex flex-col items-center gap-3 relative ${state.folderEditMode ? 'animate-wiggle' : 'active:scale-90 transition-transform'}`;
+            div.innerHTML = `
+                <div class="w-16 h-16 rounded-[24px] ${app.color} flex items-center justify-center text-white shadow-xl relative">
+                    <i class="fa-solid ${app.icon} text-2xl"></i>
+                    ${state.folderEditMode ? `<button onclick="removeAppFromFolder('${app.id}')" class="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center border-2 border-white text-[9px] shadow-md"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+                </div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase text-center truncate w-full px-1">${app.name}</span>
+            `;
+            grid.appendChild(div);
+        });
+    }
+
+    function removeAppFromFolder(appId) {
+        const folder = state.folders.find(f => f.id === state.activeFolderId);
+        folder.apps = folder.apps.filter(a => a.id !== appId);
+        renderFolderContent();
+    }
+
+    function openScanner() {
+        state.scanSelections = [];
+        const list = document.getElementById('scan-list');
+        list.innerHTML = '';
+        
+        APP_POOL.forEach(app => {
+            const item = document.createElement('div');
+            item.className = 'scan-card flex items-center p-5 rounded-[24px] bg-slate-50 cursor-pointer';
+            item.id = `scan-${app.id}`;
+            item.onclick = () => toggleScanItem(app.id);
+            item.innerHTML = `
+                <div class="w-12 h-12 rounded-2xl ${app.color} flex items-center justify-center text-white mr-5 shadow-sm">
+                    <i class="fa-solid ${app.icon} text-lg"></i>
+                </div>
+                <div class="flex-1 font-black text-slate-700 text-sm uppercase tracking-tight">${app.name}</div>
+                <div class="w-7 h-7 rounded-full border-2 border-slate-200 flex items-center justify-center check-dot transition-all">
+                    <i class="fa-solid fa-check text-[10px] hidden text-white"></i>
+                </div>
+            `;
+            list.appendChild(item);
+        });
+
+        document.getElementById('scan-modal').classList.remove('hidden');
+        document.getElementById('scan-modal').classList.add('flex');
+        updateScanButtonUI();
+    }
+
+    function toggleScanItem(id) {
+        const idx = state.scanSelections.indexOf(id);
+        const card = document.getElementById(`scan-${id}`);
+        const dot = card.querySelector('.check-dot');
+        const icon = dot.querySelector('.fa-check');
+
+        if (idx > -1) {
+            state.scanSelections.splice(idx, 1);
+            card.classList.remove('selected');
+            dot.className = "w-7 h-7 rounded-full border-2 border-slate-200 flex items-center justify-center check-dot transition-all";
+            icon.classList.add('hidden');
+        } else {
+            state.scanSelections.push(id);
+            card.classList.add('selected');
+            dot.className = "w-7 h-7 rounded-full border-2 border-blue-500 bg-blue-500 flex items-center justify-center check-dot transition-all";
+            icon.classList.remove('hidden');
+        }
+        updateScanButtonUI();
+    }
+
+    function updateScanButtonUI() {
+        const btn = document.getElementById('scan-confirm-btn');
+        const count = state.scanSelections.length;
+        btn.innerText = `確認加入 (${count})`;
+        btn.className = count > 0 
+            ? 'w-full py-6 rounded-[30px] bg-blue-600 text-white font-black uppercase tracking-widest shadow-xl shadow-blue-100 active:scale-95 transition-all'
+            : 'w-full py-6 rounded-[30px] bg-slate-100 text-slate-300 font-black uppercase tracking-widest transition-all cursor-not-allowed';
+    }
+
+    function commitScan() {
+        if (state.scanSelections.length === 0) return;
+        const folder = state.folders.find(f => f.id === state.activeFolderId);
+        state.scanSelections.forEach(id => {
+            if (!folder.apps.some(a => a.id === id)) {
+                folder.apps.push(APP_POOL.find(a => a.id === id));
+            }
+        });
+        closeScanner();
+        renderFolderContent();
+    }
+
+    function closeScanner() {
+        document.getElementById('scan-modal').classList.replace('flex', 'hidden');
+    }
+
+    window.onload = renderMain;
+</script>
+
+</body>
+</html>
+
