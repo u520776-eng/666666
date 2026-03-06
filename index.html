@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大海風格抽獎趣</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --ocean-dark: #002b4e;
+            --ocean-mid: #005c97;
+            --ocean-light: #363795;
+            --gold: #ffd700;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--ocean-dark), var(--ocean-mid), var(--ocean-light));
+            min-height: 100vh;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+
+        .ocean-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .rolling-number {
+            font-size: 15rem; /* 加大數字字體 */
+            font-weight: 900;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+            color: var(--gold);
+            line-height: 1;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(to right, #00c6ff, #0072ff);
+            transition: all 0.3s ease;
+            transform: scale(1);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(0, 198, 255, 0.6);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.95);
+        }
+
+        .history-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid var(--gold);
+            animation: slideInDown 0.5s ease-out;
+        }
+
+        /* 波浪背景動畫 */
+        .wave {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            background: url('https://raw.githubusercontent.com/y7896112/wave-asset/main/wave.png');
+            background-size: 1000px 100px;
+            opacity: 0.2;
+            z-index: -1;
+        }
+
+        .wave1 { animation: wave 30s linear infinite; }
+        .wave2 { animation: wave 15s linear infinite reverse; opacity: 0.1; bottom: 10px; }
+
+        @keyframes wave {
+            0% { background-position-x: 0; }
+            100% { background-position-x: 1000px; }
+        }
+
+        @keyframes pulse-gold {
+            0% { transform: scale(1); text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+            50% { transform: scale(1.15); text-shadow: 0 0 60px rgba(255, 215, 0, 0.9); }
+            100% { transform: scale(1); text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+        }
+
+        .winning-moment {
+            animation: pulse-gold 0.5s ease-in-out 3;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- 標題 -->
+        <header class="text-center mb-10">
+            <h1 class="text-5xl font-black tracking-widest text-white mb-2 italic">OCEAN LOTTERY</h1>
+            <p class="text-blue-200 opacity-80">深海幸運抽獎系統</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            
+            <!-- 左側：設定與紀錄區 (1/4) -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="ocean-card p-6">
+                    <h2 class="text-xl font-bold mb-4 flex items-center">
+                        <span class="mr-2">⚙️</span> 抽獎設定
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs text-blue-200 mb-1">起始</label>
+                                <input type="number" id="minRange" value="1" class="w-full bg-blue-900/50 border border-blue-400/30 rounded-lg px-2 py-1 focus:outline-none focus:border-blue-400">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-blue-200 mb-1">結束</label>
+                                <input type="number" id="maxRange" value="100" class="w-full bg-blue-900/50 border border-blue-400/30 rounded-lg px-2 py-1 focus:outline-none focus:border-blue-400">
+                            </div>
+                        </div>
+                        <button onclick="initLottery()" id="resetBtn" class="w-full py-2 text-sm border border-blue-300/50 rounded-lg hover:bg-blue-300/10 transition">
+                            重新初始化號碼池
+                        </button>
+                        <div class="pt-2 border-t border-white/10 flex justify-between items-center">
+                            <span class="text-sm text-blue-200">剩餘號碼</span>
+                            <span id="remainingCount" class="text-white font-bold text-xl">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 中獎紀錄 -->
+                <div class="ocean-card p-6 h-[500px] flex flex-col">
+                    <h2 class="text-xl font-bold mb-4 flex items-center justify-between">
+                        <span>🏆 中獎紀錄</span>
+                        <button onclick="clearHistory()" class="text-xs text-blue-300 hover:text-white">清除</button>
+                    </h2>
+                    <div id="historyList" class="flex-1 overflow-y-auto space-y-2 pr-2">
+                        <p class="text-center text-blue-400/50 py-10">尚無獲獎紀錄</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側：大螢幕抽獎區 (3/4) -->
+            <div class="lg:col-span-3">
+                <div class="ocean-card p-12 text-center h-full min-h-[600px] flex flex-col items-center justify-center relative overflow-hidden">
+                    <!-- 背景裝飾線 -->
+                    <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-blue-400 to-transparent opacity-50"></div>
+                    
+                    <div id="displayContainer" class="mb-12">
+                        <!-- 這裡只顯示數字 -->
+                        <div id="numberDisplay" class="rolling-number">0</div>
+                        <div id="statusText" class="text-2xl text-blue-300 mt-8 tracking-[0.5em] h-8 uppercase">READY</div>
+                    </div>
+
+                    <div class="relative group">
+                        <div class="absolute -inset-1 bg-gradient-to-r from-cyan-400 to-blue-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                        <button id="drawBtn" onclick="startDraw()" class="relative btn-primary px-24 py-8 rounded-full text-4xl font-black tracking-[1em] shadow-2xl">
+                            抽獎
+                        </button>
+                    </div>
+
+                    <div class="mt-12 text-blue-200/40 text-sm tracking-widest uppercase">
+                        Numbers are automatically removed from the pool after being drawn
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 背景波浪 -->
+    <div class="wave wave1"></div>
+    <div class="wave wave2"></div>
+
+    <script>
+        let availableNumbers = [];
+        let isRolling = false;
+        let history = [];
+        let rollInterval;
+
+        // 音效
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+        }
+
+        function playRollTick() {
+            initAudio();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150 + Math.random() * 300, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playWinSound() {
+            initAudio();
+            const nodes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+            nodes.forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + i * 0.1);
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime + i * 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + i * 0.1 + 0.6);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime + i * 0.1);
+                osc.stop(audioCtx.currentTime + i * 0.1 + 0.6);
+            });
+        }
+
+        function initLottery() {
+            const min = parseInt(document.getElementById('minRange').value);
+            const max = parseInt(document.getElementById('maxRange').value);
+            
+            if (isNaN(min) || isNaN(max) || min >= max) {
+                showStatus("ERROR: RANGE INVALID");
+                return;
+            }
+
+            availableNumbers = [];
+            for (let i = min; i <= max; i++) {
+                availableNumbers.push(i);
+            }
+            
+            updateUI();
+            showStatus("POOL INITIALIZED");
+        }
+
+        function updateUI() {
+            document.getElementById('remainingCount').innerText = availableNumbers.length;
+            const drawBtn = document.getElementById('drawBtn');
+            if (availableNumbers.length === 0) {
+                drawBtn.disabled = true;
+                drawBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                drawBtn.innerText = "EMPTY";
+            } else {
+                drawBtn.disabled = false;
+                drawBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                drawBtn.innerText = "抽獎";
+            }
+        }
+
+        function showStatus(text) {
+            document.getElementById('statusText').innerText = text;
+        }
+
+        function startDraw() {
+            if (isRolling || availableNumbers.length === 0) return;
+
+            initAudio();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            isRolling = true;
+            const drawBtn = document.getElementById('drawBtn');
+            const display = document.getElementById('numberDisplay');
+            drawBtn.disabled = true;
+            display.classList.remove('winning-moment');
+            showStatus("ROLLING...");
+
+            let duration = 3500; 
+            let startTime = Date.now();
+            let speed = 40; 
+
+            function roll() {
+                const elapsed = Date.now() - startTime;
+                
+                // 視覺滾動：從號碼池隨機選數字
+                const tempIndex = Math.floor(Math.random() * availableNumbers.length);
+                display.innerText = availableNumbers[tempIndex]; // 大螢幕只顯數字
+                
+                playRollTick();
+
+                if (elapsed < duration) {
+                    let progress = elapsed / duration;
+                    let nextTick = speed + (Math.pow(progress, 2) * 350); 
+                    rollInterval = setTimeout(roll, nextTick);
+                } else {
+                    finalizeDraw();
+                }
+            }
+
+            roll();
+        }
+
+        function finalizeDraw() {
+            const finalIndex = Math.floor(Math.random() * availableNumbers.length);
+            const winner = availableNumbers.splice(finalIndex, 1)[0];
+            
+            const display = document.getElementById('numberDisplay');
+            display.innerText = winner; // 大螢幕只顯數字
+            display.classList.add('winning-moment');
+            
+            showStatus("WINNER SELECTED");
+            playWinSound();
+            
+            // 紀錄區則保留「號」的顯示
+            history.unshift({
+                num: winner,
+                time: new Date().toLocaleTimeString()
+            });
+            renderHistory();
+            
+            isRolling = false;
+            updateUI();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('historyList');
+            if (history.length === 0) {
+                list.innerHTML = '<p class="text-center text-blue-400/50 py-10">尚無獲獎紀錄</p>';
+                return;
+            }
+            
+            list.innerHTML = history.map((item, index) => `
+                <div class="history-item p-4 flex justify-between items-center rounded-r-xl mb-2">
+                    <span class="font-black text-2xl text-yellow-300">${item.num}號</span>
+                    <span class="text-[10px] text-blue-300 opacity-50 uppercase">${item.time}</span>
+                </div>
+            `).join('');
+        }
+
+        function clearHistory() {
+            if (confirm("確定要清除紀錄嗎？（這不會重設號碼池）")) {
+                history = [];
+                renderHistory();
+            }
+        }
+
+        window.onload = initLottery;
+    </script>
+</body>
+</html>
+
